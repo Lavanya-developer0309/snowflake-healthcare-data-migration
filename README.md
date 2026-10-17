@@ -244,12 +244,17 @@ and no data went missing. Restoring the one-line crosswalk entry and re-running 
 
 ### Screenshots
 
-| | |
-|---|---|
-| Reconciliation scorecard | ![Scorecard](docs/images/scorecard.png) |
-| Reject report | ![Rejects](docs/images/rejects.png) |
-| Keyword (load) file: HDR / DTL records | ![Keyword file](docs/images/keyword_file.png) |
-| dbt lineage graph | ![dbt lineage](docs/images/dbt_lineage.png) |
+**Reconciliation scorecard**
+
+![Reconciliation scorecard](docs/images/scorecard.png)
+
+**Reject report**
+
+![Reject report](docs/images/rejects.png)
+
+**Keyword (load) file: HDR / DTL records**
+
+![Keyword file](docs/images/keyword_file.png)
 
 ---
 
