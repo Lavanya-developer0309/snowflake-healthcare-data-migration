@@ -74,6 +74,80 @@ Snowflake Scripting stored procedures, which is also what most migration teams a
 
 ---
 
+## Project flow, step by step
+
+One migration batch (`BATCH_001`) goes through these steps. Each one is a stored procedure or a dbt
+command, and each one writes to an audit table, so every step can be checked afterwards.
+
+**Step 1: Receive the client extracts**
+- Five pipe-delimited files (`SRC_GROUP`, `SRC_MEMBER`, `SRC_PROVIDER`, `SRC_CLAIM_HEADER`,
+  `SRC_CLAIM_LINE`, about 28,000 rows) are uploaded to the internal stage `@RAW.SRC_STAGE/BATCH_001/`.
+- Output: files in the stage, ready to load.
+
+**Step 2: Load the raw tables** (`SP_LOAD_RAW`)
+- Reads the file list from the config table `MIG_SOURCE_FILE_CONFIG` and runs `COPY INTO` for each file.
+- RAW tables are all VARCHAR, so a bad date or a bad number never breaks the load. Each row gets
+  lineage columns: batch ID, file name, file row number, load time.
+- Re-runnable: deletes the batch's rows first. Registers the batch in `MIG_BATCH_CONTROL` and logs the
+  row counts in `MIG_LOAD_LOG`.
+
+**Step 3: Profile the source data** (`SP_PROFILE_ALL`)
+- Uses dynamic SQL to profile every column of every RAW table: null count, distinct count, min / max
+  length and value, invalid dates, non-numeric values, invalid characters.
+- Output: `AUDIT.DQ_PROFILE_RESULTS` and a CSV profiling report (`DQ_PROFILE_REPORT.csv`) unloaded
+  to a stage, ready to send to the client.
+
+**Step 4: Cleanse and type the data** (dbt `staging` models)
+- One view per source file: trim, upper-case, remove accents and control characters, convert dates
+  and amounts from VARCHAR to proper types.
+
+**Step 5: Apply the mapping rules** (dbt `intermediate` models + crosswalk seeds)
+- Implements the BA mapping document (`docs/mapping_document.xlsx`): crosswalks for gender,
+  relationship, plan and claim status are seed CSV files kept in Git.
+- Generates Facets keys (`GRGR_CK`, `SBSB_CK`, `MEME_CK`, member suffix `MEME_SFX`).
+- Every row gets a `reject_reason` (empty = accepted). Rejects cascade like the target's referential
+  rules: group → subscriber → dependents → claims → claim lines.
+
+**Step 6: Build the Facets-like tables** (dbt `facets_stg` models)
+- Accepted rows go to `CMC_GRGR_GROUP`, `CMC_SBSB_SUBSC`, `CMC_MEME_MEMBER`, `CMC_MEPE_PRCS_ELIG`,
+  `CMC_PRPR_PROV`, `CMC_CLCL_CLAIM`, `CMC_CDML_CL_LINE`.
+- Rejected rows go to `MIG_TRANSFORM_REJECTS` with the reason, so no row is ever silently dropped.
+
+**Step 7: Pre-load validation gate** (dbt tests, 117 in total)
+- Duplicates (`unique`), referential integrity (`relationships`), config values (`values_in_config`),
+  record counts (`reconciles_with_source`: source = staged + rejected) and business rules such as
+  "every subscriber has suffix 0" and "claim charge = sum of line charges".
+- Source-data tests are warnings (they document the client's data problems). Pre-load tests are
+  errors: if one fails, dbt skips that entity's keyword file, so bad data cannot be loaded.
+- Every test result is logged to `AUDIT.DBT_TEST_RESULTS` by an `on-run-end` hook.
+
+**Step 8: Create the keyword (load) files** (dbt `keyword` models + post-hook)
+- One file per entity with a header (HDR), detail (DTL) and trailer (TRL) record. The trailer holds
+  the record count.
+- Unloaded with `COPY INTO @AUDIT.KEYWORD_STAGE/BATCH_001/`.
+
+**Step 9: Load the target** (`SP_LOAD_FACETS_TARGET`, plays the role of the Facets core job)
+- Reads each keyword file, checks that the header batch matches and that the trailer count equals the
+  number of detail records, then loads `FACETS_TGT` in one transaction per entity.
+- If a check fails, nothing is loaded for that entity and the error is logged.
+
+**Step 10: Reconciliation scorecard** (`SP_BUILD_SCORECARD`)
+- For each entity compares counts at every step: source → rejected → staged → keyword detail →
+  trailer → target, and works out the load percentage.
+- `SOURCE_RECON_STATUS = BALANCED` when source = staged + rejected; `TARGET_RECON_STATUS = MATCH`
+  when staged = keyword = target.
+- Collects rejects, failed or warning tests and profiling issues into `MIGRATION_ERROR_LOG`, and sets
+  the batch status (`PASSED`, `PASSED_WITH_WARNINGS` or `FAILED`).
+
+**Around the pipeline**
+- **Orchestration:** one script (`orchestration/run_pipeline.sh`) runs steps 2–10; Snowflake Tasks
+  and GitHub Actions versions are included.
+- **Security:** three roles (developer, QA, analyst) and masking policies on SSN, date of birth and
+  names.
+- **Recovery:** Time Travel to undo a bad update, UNDROP, and zero-copy clones for test environments.
+
+---
+
 ## The data
 
 `scripts/generate_source_data.py` creates one batch of legacy extracts (~28,000 rows) and deliberately
@@ -139,32 +213,92 @@ snowflake-healthcare-data-migration/
 
 ---
 
-## Quick start
+## How to run it yourself
 
-Full beginner-friendly instructions are in **[docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)**. Short version:
+Everything runs on a free Snowflake trial and a laptop; no AWS account is needed. Allow 2–3 hours the
+first time. Detailed screenshots-level instructions and fixes for common errors are in
+**[docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)**.
 
-```bash
-# 1. Snowflake: run sql/00_setup/01..04 in Snowsight, then sql/01..05 (in order)
-# 2. Upload data/source/BATCH_001/SRC_*.txt to @HC_MIGRATION_DB.RAW.SRC_STAGE/BATCH_001/
-# 3. Local machine
-python3.12 -m venv .venv && source .venv/bin/activate # Windows: py -3.12 -m venv .venv; .venv\Scripts\activate
-pip install -r requirements.txt
-python scripts/generate_keypair.py                    # then run sql/00_setup/05_dbt_service_user.sql
-cp dbt/profiles.yml.example ~/.dbt/profiles.yml        # set SNOWFLAKE_ACCOUNT + SNOWFLAKE_PRIVATE_KEY_PATH
-cd dbt && dbt deps && dbt debug && cd ..
-# 4. Run the whole batch
-bash orchestration/run_pipeline.sh BATCH_001          # Windows: .\orchestration\run_pipeline.ps1
+### 1. Create a Snowflake trial account
+Sign up at https://signup.snowflake.com: **Enterprise** edition (needed for masking), any cloud and
+region (this project used AWS Mumbai). Set up MFA. The project uses well under $10 of the free credits.
+
+### 2. Build the Snowflake objects
+In Snowsight → **Projects → Workspaces**, open each file below and click **Run all**, in this order:
+
+| # | File | Creates |
+|---|---|---|
+| 1 | `sql/00_setup/01_roles_warehouse_database.sql` | roles, warehouse, database, schemas, grants |
+| 2 | `sql/00_setup/02_file_formats_and_stages.sql` | file formats, internal stages |
+| 3 | `sql/00_setup/03_control_and_audit_tables.sql` | config, batch control, logs, scorecard tables |
+| 4 | `sql/00_setup/04_masking_policies.sql` | masking policies |
+| 5 | `sql/01_raw_load/01_raw_tables.sql` | RAW landing tables |
+| 6 | `sql/01_raw_load/02_sp_load_raw.sql` | `SP_LOAD_RAW` |
+| 7 | `sql/02_profiling/01_sp_profile_source.sql` | `SP_PROFILE_SOURCE`, `SP_PROFILE_ALL` |
+| 8 | `sql/03_target_load/01_sp_load_facets_target.sql` | `SP_LOAD_FACETS_TARGET` |
+| 9 | `sql/04_scorecard/01_sp_build_scorecard.sql` | `SP_BUILD_SCORECARD`, scorecard views |
+| 10 | `sql/05_orchestration/01_tasks_dag.sql` | `SP_RUN_STEP` + tasks |
+
+### 3. Upload the source files
+Snowsight → Catalog → `HC_MIGRATION_DB` → `RAW` → Stages → `SRC_STAGE` → **+ Files** → add the five
+`data/source/BATCH_001/SRC_*.txt` files with path `BATCH_001`. Check:
+```sql
+LIST @HC_MIGRATION_DB.RAW.SRC_STAGE/BATCH_001/;    -- 5 files
 ```
 
-Then in Snowsight:
+### 4. Set up the laptop (Python 3.12 + dbt)
+Install **Python 3.12** (not 3.14+) and Git. On a Mac also run
+`open "/Applications/Python 3.12/Install Certificates.command"` once. Then in the project folder:
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate   # Windows: py -3.12 -m venv .venv; .venv\Scripts\activate
+pip install -r requirements.txt
+dbt --version                                            # Core 1.12.x, snowflake 1.12.x
+```
 
+### 5. Connect dbt to Snowflake with a key pair
+```bash
+python scripts/generate_keypair.py      # saves the private key in ~/.ssh/snowflake/, prints the public key
+```
+Paste the printed public key into `sql/00_setup/05_dbt_service_user.sql` and run it in Snowsight.
+This creates the service user `MIG_DBT_SVC`. Then:
+```bash
+mkdir -p ~/.dbt && cp dbt/profiles.yml.example ~/.dbt/profiles.yml
+export SNOWFLAKE_ACCOUNT="ORGNAME-ACCOUNTNAME"                     # Snowsight → your name → Connect a tool
+export SNOWFLAKE_PRIVATE_KEY_PATH="$HOME/.ssh/snowflake/rsa_key.p8"
+cd dbt && dbt deps && dbt debug && cd ..                           # "All checks passed!"
+```
+The private key stays on your laptop; `.gitignore` keeps it and `profiles.yml` out of Git.
+
+### 6. Run the pipeline
+Step by step, from the `dbt` folder:
+```bash
+dbt run-operation load_raw              # step 2  SP_LOAD_RAW
+dbt run-operation profile_source        # step 3  SP_PROFILE_ALL
+dbt run-operation clear_keyword_files   #         remove old keyword files
+dbt build                               # steps 4–8  seeds, models, tests, keyword files
+dbt run-operation load_target           # step 9  SP_LOAD_FACETS_TARGET
+dbt run-operation build_scorecard       # step 10 SP_BUILD_SCORECARD
+```
+Or everything in one command, from the project folder:
+```bash
+bash orchestration/run_pipeline.sh BATCH_001        # Windows: .\orchestration\run_pipeline.ps1 -Batch BATCH_001
+```
+`dbt build` should end with **ERROR=0**. The WARN tests are the injected source data problems.
+
+### 7. Check the results
 ```sql
 SELECT * FROM HC_MIGRATION_DB.AUDIT.V_SCORECARD     WHERE BATCH_ID = 'BATCH_001';
 SELECT * FROM HC_MIGRATION_DB.AUDIT.V_ERROR_SUMMARY WHERE BATCH_ID = 'BATCH_001';
 ```
+Every entity should show `BALANCED` and `MATCH` (see [Results](#results-batch_001) below). More queries
+are in `sql/07_queries/01_useful_queries.sql`.
 
-Every entity should show `SOURCE_RECON_STATUS = BALANCED` and `TARGET_RECON_STATUS = MATCH`,
-with rejects and warnings explained in the error log.
+### 8. Try the extras
+- `sql/06_security_and_recovery/01_apply_masking_to_target.sql`: same query as three roles, masked vs clear.
+- `sql/06_security_and_recovery/02_time_travel_and_clone_demo.sql`: undo a bad UPDATE, UNDROP, clone.
+- `dbt docs generate && dbt docs serve`: documentation and lineage graph in the browser.
+- Delete the `1,M` row from `dbt/seeds/xwalk_gender.csv`, re-run, and watch the rejects grow while the
+  scorecard still balances. Put the row back afterwards.
 
 ---
 
