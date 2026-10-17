@@ -129,7 +129,7 @@ snowflake-healthcare-data-migration/
 │   ├── macros/                         cleansing, keyword file, masking, procedure calls, test logging
 │   └── tests/                          custom generic tests + singular business-rule tests
 ├── orchestration/run_pipeline.{sh,ps1} one command to run the whole batch
-├── streamlit/migration_dashboard.py    Streamlit in Snowflake scorecard dashboard
+├── streamlit/migration_dashboard.py    optional Streamlit dashboard (see Future enhancements)
 ├── docs/
 │   ├── SETUP_GUIDE.md                  step-by-step: trial account → first scorecard
 │   ├── INTERVIEW_GUIDE.md              how to explain the project + likely questions
@@ -147,13 +147,13 @@ Full beginner-friendly instructions are in **[docs/SETUP_GUIDE.md](docs/SETUP_GU
 # 1. Snowflake: run sql/00_setup/01..04 in Snowsight, then sql/01..05 (in order)
 # 2. Upload data/source/BATCH_001/SRC_*.txt to @HC_MIGRATION_DB.RAW.SRC_STAGE/BATCH_001/
 # 3. Local machine
-python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+python3.12 -m venv .venv && source .venv/bin/activate # Windows: py -3.12 -m venv .venv; .venv\Scripts\activate
 pip install -r requirements.txt
 python scripts/generate_keypair.py                    # then run sql/00_setup/05_dbt_service_user.sql
 cp dbt/profiles.yml.example ~/.dbt/profiles.yml        # set SNOWFLAKE_ACCOUNT + SNOWFLAKE_PRIVATE_KEY_PATH
 cd dbt && dbt deps && dbt debug && cd ..
 # 4. Run the whole batch
-./orchestration/run_pipeline.sh BATCH_001             # Windows: .\orchestration\run_pipeline.ps1
+bash orchestration/run_pipeline.sh BATCH_001          # Windows: .\orchestration\run_pipeline.ps1
 ```
 
 Then in Snowsight:
@@ -194,22 +194,69 @@ with rejects and warnings explained in the error log.
 
 ---
 
-## Screenshots
+## Results (BATCH_001)
 
-Add your own after running the project (Snowsight → run query → screenshot):
+The full pipeline was run end to end on a Snowflake trial account (AWS, Mumbai).
+
+**dbt build:** 117 nodes, `PASS=104 WARN=13 ERROR=0`. The 13 warnings are the data-quality
+problems injected on purpose (invalid dates, bad SSNs, accented names, orphans, bad NPIs, negative
+paid lines). They are reported but do not block the load.
+
+**Reconciliation scorecard** (`AUDIT.V_SCORECARD`):
+
+| Entity | Source | Rejected | Staged = Keyword = Target | Load % | Recon |
+|---|---:|---:|---:|---:|---|
+| GROUP | 60 | 0 | 60 | 100.00 | BALANCED / MATCH |
+| SUBSCRIBER | 1,505 | 9 | 1,496 | 99.40 | BALANCED / MATCH |
+| MEMBER | 3,938 | 36 | 3,902 | 99.09 | BALANCED / MATCH |
+| ELIGIBILITY | 3,938 | 36 | 3,902 | 99.09 | BALANCED / MATCH |
+| PROVIDER | 350 | 3 | 347 | 99.14 | BALANCED / MATCH |
+| CLAIM | 8,000 | 125 | 7,875 | 98.44 | BALANCED / MATCH |
+| CLAIM_LINE | 15,962 | 240 | 15,722 | 98.50 | BALANCED / MATCH |
+
+Every source row is either loaded or rejected with a reason. Not one record is unaccounted for.
+
+**Member reject report** (`FACETS_STG.MIG_TRANSFORM_REJECTS`): each reason traces back to an injected issue.
+
+| Reject reason | Records |
+|---|---:|
+| DUPLICATE_SOURCE_RECORD | 10 |
+| GROUP_NOT_FOUND (subscriber + dependents) | 9 |
+| PLAN_XWALK_NOT_FOUND | 5 |
+| DOB_MISSING | 5 |
+| GENDER_XWALK_NOT_FOUND | 4 |
+| DOB_INVALID_DATE | 3 |
+| **Total** | **36** |
+
+**Resilience test: a missing crosswalk value.** The legacy gender code `1 → M` was removed from
+`dbt/seeds/xwalk_gender.csv` and the pipeline re-run:
+
+| Entity | Rejected before | Rejected after | Recon |
+|---|---:|---:|---|
+| SUBSCRIBER | 9 | 12 | BALANCED |
+| MEMBER / ELIGIBILITY | 36 | 45 | BALANCED |
+| CLAIM | 125 | 145 | BALANCED |
+| CLAIM_LINE | 240 | 276 | BALANCED |
+
+The affected members were rejected with `GENDER_XWALK_NOT_FOUND`, their dependents, claims and
+claim lines cascaded with traceable reasons, and every entity still balanced. The load did not fail
+and no data went missing. Restoring the one-line crosswalk entry and re-running brought the numbers back.
+
+### Screenshots
 
 | | |
 |---|---|
-| `docs/images/scorecard.png` | the `V_SCORECARD` result |
-| `docs/images/dbt_lineage.png` | `dbt docs generate && dbt docs serve` lineage graph |
-| `docs/images/masking.png` | same query as MIG_DEVELOPER vs MIG_ANALYST |
-| `docs/images/task_graph.png` | Snowsight task graph |
-| `docs/images/streamlit.png` | Streamlit dashboard |
+| Reconciliation scorecard | ![Scorecard](docs/images/scorecard.png) |
+| Reject report | ![Rejects](docs/images/rejects.png) |
+| Keyword (load) file: HDR / DTL records | ![Keyword file](docs/images/keyword_file.png) |
+| dbt lineage graph | ![dbt lineage](docs/images/dbt_lineage.png) |
 
 ---
 
 ## Future enhancements
 
+- Streamlit in Snowflake dashboard over the scorecard and error log (a first version is in
+  `streamlit/migration_dashboard.py`).
 - Land source files from **Amazon S3** through an external stage + storage integration (and Snowpipe for
   automatic ingestion).
 - Run dbt inside Snowflake with **dbt Projects on Snowflake** so the whole pipeline is one task graph.
