@@ -1,0 +1,181 @@
+{
+  "seed": 42,
+  "row_counts": {
+    "SRC_GROUP": 60,
+    "SRC_MEMBER": 3938,
+    "SRC_MEMBER (subscribers, RELATIONSHIP_CODE=18)": 1505,
+    "SRC_PROVIDER": 350,
+    "SRC_CLAIM_HEADER": 8000,
+    "SRC_CLAIM_LINE": 15962
+  },
+  "injected_issues": {
+    "GROUP_NAME_NULL": {
+      "count": 1,
+      "samples": [
+        "G0004"
+      ]
+    },
+    "GENDER_LEGACY_NUMERIC_CODE (mapped via crosswalk)": {
+      "count": 12,
+      "samples": [
+        "M0001335",
+        "M0002310",
+        "M0001145",
+        "M0000670",
+        "M0000730"
+      ]
+    },
+    "GENDER_UNMAPPED_X (reject)": {
+      "count": 4,
+      "samples": [
+        "M0001007",
+        "M0001925",
+        "M0000508",
+        "M0003062"
+      ]
+    },
+    "DOB_NULL (reject)": {
+      "count": 5,
+      "samples": [
+        "M0003072",
+        "M0000572",
+        "M0000534",
+        "M0003447",
+        "M0000037"
+      ]
+    },
+    "DOB_INVALID_DATE (reject)": {
+      "count": 3,
+      "samples": [
+        "M0000711=02/30/1985",
+        "M0002510=13/01/1990",
+        "M0002938=1988-07-14"
+      ]
+    },
+    "FIRST_NAME_INVALID_CHARACTERS (cleansed)": {
+      "count": 8,
+      "samples": [
+        "M0002856='José'",
+        "M0003211='MarÃ\\xada'",
+        "M0001888='Ann\\tMarie'",
+        "M0001207='Peña'",
+        "M0003854='Chloë'"
+      ]
+    },
+    "SSN_WITH_DASHES (cleansed)": {
+      "count": 6,
+      "samples": [
+        "M0000212",
+        "M0003399",
+        "M0001082",
+        "M0002235",
+        "M0002555"
+      ]
+    },
+    "SSN_INVALID (nulled)": {
+      "count": 3,
+      "samples": [
+        "M0003548",
+        "M0002430",
+        "M0002129"
+      ]
+    },
+    "GROUP_NOT_FOUND (subscriber + dependents reject)": {
+      "count": 2,
+      "samples": [
+        "M0001773",
+        "M0003226"
+      ]
+    },
+    "PLAN_XWALK_NOT_FOUND (subscriber + dependents reject)": {
+      "count": 2,
+      "samples": [
+        "M0000842",
+        "M0002325"
+      ]
+    },
+    "LAST_NAME_PADDED_SPACES (trimmed)": {
+      "count": 3,
+      "samples": [
+        "M0000407",
+        "M0001058",
+        "M0000915"
+      ]
+    },
+    "DUPLICATE_MEMBER_ROW (reject duplicate)": {
+      "count": 10,
+      "samples": [
+        "M0002804",
+        "M0001703",
+        "M0002349",
+        "M0003153",
+        "M0001112"
+      ]
+    },
+    "PROVIDER_INVALID_STATE (reject)": {
+      "count": 3,
+      "samples": [
+        "P00320",
+        "P00049",
+        "P00277"
+      ]
+    },
+    "PROVIDER_NPI_WRONG_LENGTH (warning)": {
+      "count": 2,
+      "samples": [
+        "P00181",
+        "P00062"
+      ]
+    },
+    "CLAIM_MEMBER_NOT_FOUND (reject)": {
+      "count": 4,
+      "samples": [
+        "C000006164",
+        "C000006334",
+        "C000003349",
+        "C000004730"
+      ]
+    },
+    "CLAIM_SERVICE_FROM_AFTER_TO (reject)": {
+      "count": 3,
+      "samples": [
+        "C000002742",
+        "C000006571",
+        "C000004040"
+      ]
+    },
+    "CLAIM_STATUS_UNMAPPED (reject)": {
+      "count": 2,
+      "samples": [
+        "C000001788",
+        "C000003540"
+      ]
+    },
+    "CLAIM_PROVIDER_NOT_LOADED (cascade reject)": {
+      "count": 76,
+      "samples": [
+        "C000000067",
+        "C000000123",
+        "C000000126",
+        "C000000375",
+        "C000000376"
+      ]
+    },
+    "CLAIM_LINE_ORPHAN (reject)": {
+      "count": 3,
+      "samples": [
+        "C800000000",
+        "C800000001",
+        "C800000002"
+      ]
+    },
+    "CLAIM_LINE_NEGATIVE_PAID (warning)": {
+      "count": 3,
+      "samples": [
+        "C000001522-2",
+        "C000005983-1",
+        "C000003853-1"
+      ]
+    }
+  }
+}

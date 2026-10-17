@@ -1,0 +1,198 @@
+version: 2
+
+# ------------------------------------------------------------------------------
+# PRE-LOAD VALIDATION
+# These tests run with severity ERROR (dbt default). If any of them fails,
+# dbt build SKIPS the downstream keyword models, so no keyword file is produced
+# and nothing reaches FACETS_TGT. That is the "validation gate".
+#
+#   duplicates       -> unique / unique_combination_of_columns
+#   referential      -> relationships (member -> subscriber -> group, claim -> member ...)
+#   config values    -> values_in_config / accepted_values
+#   reconciliation   -> reconciles_with_source  (source = staged + rejected)
+#   business rules   -> dbt_utils.expression_is_true
+# A few checks are WARN only: they are reported in the scorecard but do not
+# block the load (agreed "load with warning" rules).
+# ------------------------------------------------------------------------------
+
+models:
+  - name: cmc_grgr_group
+    description: Facets-like employer group table.
+    data_tests:
+      - reconciles_with_source:
+          arguments: {source_table: src_group, entity_name: GROUP}
+    columns:
+      - name: grgr_ck
+        data_tests: [unique, not_null]
+      - name: grgr_id
+        data_tests: [unique, not_null]
+      - name: grgr_name
+        data_tests: [not_null]
+      - name: lobd_id
+        data_tests:
+          - values_in_config:
+              arguments: {config_type: VALID_LOB}
+      - name: grgr_state
+        data_tests:
+          - values_in_config:
+              arguments: {config_type: VALID_STATE}
+      - name: grgr_sts
+        data_tests:
+          - values_in_config:
+              arguments: {config_type: VALID_GROUP_STATUS}
+
+  - name: cmc_sbsb_subsc
+    description: Facets-like subscriber table.
+    data_tests:
+      - reconciles_with_source:
+          arguments:
+            source_table: src_member
+            entity_name: SUBSCRIBER
+            source_filter: "trim(relationship_code) = '18'"
+    columns:
+      - name: sbsb_ck
+        data_tests: [unique, not_null]
+      - name: sbsb_id
+        data_tests: [unique, not_null]
+      - name: grgr_ck
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('cmc_grgr_group'), field: grgr_ck}
+
+  - name: cmc_meme_member
+    description: Facets-like member table. SSN, DOB and names are masked for non-developer roles.
+    data_tests:
+      - reconciles_with_source:
+          arguments: {source_table: src_member, entity_name: MEMBER}
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [sbsb_ck, meme_sfx]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "meme_birth_dt <= current_date()"
+    columns:
+      - name: meme_ck
+        data_tests: [unique, not_null]
+      - name: sbsb_ck
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('cmc_sbsb_subsc'), field: sbsb_ck}
+      - name: meme_sex
+        data_tests:
+          - values_in_config:
+              arguments: {config_type: VALID_MEME_SEX}
+      - name: meme_rel
+        data_tests:
+          - values_in_config:
+              arguments: {config_type: VALID_MEME_REL}
+      - name: meme_birth_dt
+        data_tests: [not_null]
+      - name: meme_ssn
+        data_tests:
+          - not_null:
+              config:
+                severity: warn          # loaded without SSN, reported to the client
+
+  - name: cmc_mepe_prcs_elig
+    description: Facets-like member eligibility (one coverage span per member).
+    data_tests:
+      - reconciles_with_source:
+          arguments: {source_table: src_member, entity_name: ELIGIBILITY}
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "mepe_term_dt >= mepe_eff_dt"
+    columns:
+      - name: meme_ck
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments: {to: ref('cmc_meme_member'), field: meme_ck}
+      - name: pdpd_id
+        data_tests: [not_null]
+      - name: lobd_id
+        data_tests:
+          - values_in_config:
+              arguments: {config_type: VALID_LOB}
+
+  - name: cmc_prpr_prov
+    description: Facets-like provider table.
+    data_tests:
+      - reconciles_with_source:
+          arguments: {source_table: src_provider, entity_name: PROVIDER}
+    columns:
+      - name: prpr_id
+        data_tests: [unique, not_null]
+      - name: prad_state
+        data_tests:
+          - values_in_config:
+              arguments: {config_type: VALID_STATE}
+      - name: prpr_npi
+        data_tests:
+          - matches_regex:
+              arguments: {pattern: "[0-9]{10}"}
+              config:
+                severity: warn          # bad NPI length is loaded but reported
+
+  - name: cmc_clcl_claim
+    description: Facets-like claim header table.
+    data_tests:
+      - reconciles_with_source:
+          arguments: {source_table: src_claim_header, entity_name: CLAIM}
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "clcl_low_svc_dt <= clcl_high_svc_dt"
+    columns:
+      - name: clcl_id
+        data_tests: [unique, not_null]
+      - name: meme_ck
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('cmc_meme_member'), field: meme_ck}
+      - name: prpr_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('cmc_prpr_prov'), field: prpr_id}
+      - name: clcl_cl_type
+        data_tests:
+          - values_in_config:
+              arguments: {config_type: VALID_CLAIM_TYPE}
+      - name: clcl_cur_sts
+        data_tests:
+          - accepted_values:
+              arguments: {values: ["02", "11", "91"]}
+
+  - name: cmc_cdml_cl_line
+    description: Facets-like claim line table.
+    data_tests:
+      - reconciles_with_source:
+          arguments: {source_table: src_claim_line, entity_name: CLAIM_LINE}
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [clcl_id, cdml_seq_no]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "cdml_paid_amt >= 0"
+          config:
+            severity: warn              # negative paid lines are reported, not blocked
+    columns:
+      - name: clcl_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('cmc_clcl_claim'), field: clcl_id}
+
+  - name: mig_transform_rejects
+    description: >
+      Every source row rejected by a transformation rule, with the entity, the
+      legacy key, the reason and the source file / row number. This is the
+      reject report the client uses to fix and resend data.
+    columns:
+      - name: entity_name
+        data_tests: [not_null]
+      - name: reject_reason
+        data_tests: [not_null]

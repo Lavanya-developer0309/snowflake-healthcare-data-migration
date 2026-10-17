@@ -1,0 +1,82 @@
+version: 2
+
+# ------------------------------------------------------------------------------
+# RAW tables loaded by AUDIT.SP_LOAD_RAW (all VARCHAR, one per source extract).
+# Source tests run with severity WARN (set for this folder in dbt_project.yml): they DOCUMENT data-quality problems in
+# the client's data (same purpose as profiling) but never stop the pipeline -
+# bad records are handled by reject rules in the intermediate layer.
+# ------------------------------------------------------------------------------
+sources:
+  - name: legacy
+    description: Legacy payer source extracts (synthetic data)
+    database: HC_MIGRATION_DB
+    schema: RAW
+    tables:
+      - name: src_group
+        description: Employer groups
+        columns:
+          - name: group_number
+            data_tests: [not_null, unique]
+          - name: group_name
+            data_tests: [not_null]
+          - name: group_eff_date
+            data_tests: [valid_legacy_date]
+
+      - name: src_member
+        description: Subscribers and dependents with coverage
+        columns:
+          - name: member_id
+            data_tests: [not_null]
+          - name: date_of_birth
+            data_tests: [not_null, valid_legacy_date]
+          - name: gender_code
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ["M", "F", "U"]
+          - name: ssn
+            data_tests:
+              - matches_regex:
+                  arguments:
+                    pattern: "[0-9]{9}"
+          - name: group_number
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('legacy', 'src_group')
+                    field: group_number
+          - name: first_name
+            data_tests: [no_invalid_characters]
+
+      - name: src_provider
+        description: Practitioners and facilities
+        columns:
+          - name: provider_id
+            data_tests: [not_null, unique]
+          - name: npi
+            data_tests:
+              - matches_regex:
+                  arguments:
+                    pattern: "[0-9]{10}"
+
+      - name: src_claim_header
+        description: Medical claim headers
+        columns:
+          - name: claim_id
+            data_tests: [not_null, unique]
+          - name: member_id
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('legacy', 'src_member')
+                    field: member_id
+
+      - name: src_claim_line
+        description: Medical claim service lines
+        columns:
+          - name: claim_id
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('legacy', 'src_claim_header')
+                    field: claim_id

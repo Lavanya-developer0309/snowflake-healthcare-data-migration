@@ -1,0 +1,57 @@
+# ------------------------------------------------------------------------------
+# Run the whole migration pipeline against Snowflake on demand
+# (Actions tab > "Run migration pipeline" > Run workflow).
+#
+# Needs two repository secrets (Settings > Secrets and variables > Actions):
+#   SNOWFLAKE_ACCOUNT       e.g. ABCDEFG-XY12345
+#   SNOWFLAKE_PRIVATE_KEY   full contents of rsa_key.p8 (service user MIG_DBT_SVC)
+# ------------------------------------------------------------------------------
+name: Run migration pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_id:
+        description: "Batch to process"
+        required: true
+        default: "BATCH_001"
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    env:
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_PRIVATE_KEY_PATH: ${{ github.workspace }}/rsa_key.p8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dbt
+        run: pip install -r requirements.txt
+
+      - name: Configure dbt profile and key
+        run: |
+          mkdir -p ~/.dbt
+          cp dbt/profiles.yml.example ~/.dbt/profiles.yml
+          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > rsa_key.p8
+          chmod 600 rsa_key.p8
+
+      - name: dbt deps
+        working-directory: dbt
+        run: dbt deps
+
+      - name: Run pipeline
+        run: bash orchestration/run_pipeline.sh "${{ github.event.inputs.batch_id }}"
+
+      - name: Upload dbt artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-artifacts
+          path: |
+            dbt/target/run_results.json
+            dbt/target/manifest.json
+            dbt/logs/dbt.log

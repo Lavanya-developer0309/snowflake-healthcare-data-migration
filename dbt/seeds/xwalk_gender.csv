@@ -1,0 +1,6 @@
+src_gender_code,facets_sex,description
+M,M,Male
+F,F,Female
+U,U,Unknown
+2,F,Legacy numeric code - female
+1,M,Legacy numeric code - male

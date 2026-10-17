@@ -1,0 +1,7 @@
+status_level,src_status,facets_status,description
+CLAIM,PAID,02,Paid
+CLAIM,DENIED,91,Denied
+CLAIM,PEND,11,Pended
+LINE,P,02,Paid
+LINE,D,91,Denied
+LINE,H,11,Pended / held

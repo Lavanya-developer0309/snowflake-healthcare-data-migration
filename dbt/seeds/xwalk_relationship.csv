@@ -1,0 +1,5 @@
+src_relationship_code,facets_rel,description
+18,M,Self / subscriber (X12 code 18)
+01,S,Spouse (X12 code 01)
+19,D,Child / dependent (X12 code 19)
+G8,O,Other relationship (X12 code G8)

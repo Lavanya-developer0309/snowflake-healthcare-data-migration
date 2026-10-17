@@ -1,0 +1,26 @@
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+logs/
+dbt/package-lock.yml
+.user.yml
+
+# secrets - NEVER commit these
+profiles.yml
+*.p8
+*.pem
+rsa_key*
+.env
+
+# python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

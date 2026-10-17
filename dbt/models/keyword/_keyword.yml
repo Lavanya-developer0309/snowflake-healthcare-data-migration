@@ -1,0 +1,23 @@
+version: 2
+
+# One model per entity. Each builds HDR / DTL / TRL records from the validated
+# Facets-like table and, in a post-hook, unloads them as a keyword file to
+# @AUDIT.KEYWORD_STAGE/<BATCH_ID>/KW_<ENTITY>.txt.
+# Because these models depend on the facets_stg models, dbt build only runs
+# them after ALL tests on the parent table have passed.
+
+models:
+  - name: kw_group
+    description: Keyword file records for groups (KW_GROUP.txt)
+  - name: kw_subscriber
+    description: Keyword file records for subscribers (KW_SUBSCRIBER.txt)
+  - name: kw_member
+    description: Keyword file records for members (KW_MEMBER.txt)
+  - name: kw_eligibility
+    description: Keyword file records for eligibility (KW_ELIGIBILITY.txt)
+  - name: kw_provider
+    description: Keyword file records for providers (KW_PROVIDER.txt)
+  - name: kw_claim
+    description: Keyword file records for claim headers (KW_CLAIM.txt)
+  - name: kw_claim_line
+    description: Keyword file records for claim lines (KW_CLAIM_LINE.txt)

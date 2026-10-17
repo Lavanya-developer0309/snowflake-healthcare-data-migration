@@ -1,0 +1,43 @@
+# ------------------------------------------------------------------------------
+# CI: on every push / pull request, check that the dbt project compiles.
+# "dbt parse" needs no Snowflake connection, so this runs without secrets.
+# ------------------------------------------------------------------------------
+name: dbt CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  parse:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dbt
+    env:
+      SNOWFLAKE_ACCOUNT: ci-dummy-account
+      SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/dummy.p8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dbt
+        run: pip install -r ../requirements.txt
+
+      - name: Create a CI profile
+        run: |
+          mkdir -p ~/.dbt
+          cp profiles.yml.example ~/.dbt/profiles.yml
+
+      - name: dbt deps
+        run: dbt deps
+
+      - name: dbt parse (compile check, no warehouse needed)
+        run: dbt parse
+
+      - name: List models and tests
+        run: dbt ls --resource-type model --resource-type test

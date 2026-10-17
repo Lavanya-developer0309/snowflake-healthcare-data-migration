@@ -1,0 +1,51 @@
+# ------------------------------------------------------------------------------
+# Copy this file to  ~/.dbt/profiles.yml   (Windows: C:\Users\<you>\.dbt\profiles.yml)
+#
+# NEVER commit your real profiles.yml or private key to GitHub
+# (both are listed in .gitignore). Values are read from environment variables.
+#
+# Authentication: Snowflake now requires MFA for people who sign in with a
+# password, which does not work well for automated tools like dbt. So dbt
+# connects as a SERVICE user (MIG_DBT_SVC) with KEY-PAIR authentication:
+#   1. python scripts/generate_keypair.py             (creates the key files)
+#   2. run sql/00_setup/05_dbt_service_user.sql        (paste the public key)
+#
+# Environment variables to set before running dbt:
+#   Windows PowerShell:
+#     $env:SNOWFLAKE_ACCOUNT = "myorg-myaccount"
+#     $env:SNOWFLAKE_PRIVATE_KEY_PATH = "C:\Users\<you>\.ssh\snowflake\rsa_key.p8"
+#   macOS / Linux:
+#     export SNOWFLAKE_ACCOUNT="myorg-myaccount"
+#     export SNOWFLAKE_PRIVATE_KEY_PATH="$HOME/.ssh/snowflake/rsa_key.p8"
+#
+# SNOWFLAKE_ACCOUNT = your account identifier. In Snowsight: click your name
+# (bottom-left) > Connect a tool to Snowflake > Account identifier,
+# e.g. "ABCDEFG-XY12345" (use "-" between organization and account).
+# ------------------------------------------------------------------------------
+hc_migration:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: MIG_DBT_SVC
+      authenticator: snowflake_jwt
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      role: MIG_DEVELOPER
+      warehouse: MIG_WH
+      database: HC_MIGRATION_DB
+      schema: STAGING
+      threads: 4
+
+    # Alternative: your own user with password + MFA (Duo push on every connection)
+    # dev_password:
+    #   type: snowflake
+    #   account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+    #   user: "{{ env_var('SNOWFLAKE_USER') }}"
+    #   password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+    #   authenticator: username_password_mfa
+    #   role: MIG_DEVELOPER
+    #   warehouse: MIG_WH
+    #   database: HC_MIGRATION_DB
+    #   schema: STAGING
+    #   threads: 4

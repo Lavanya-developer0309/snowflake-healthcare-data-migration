@@ -1,0 +1,48 @@
+version: 2
+
+# Crosswalks (legacy code -> Facets code) and config values used by the
+# transformations and the pre-load "config value" checks.
+# column_types keep codes like "01" from being read as the number 1.
+
+seeds:
+  - name: xwalk_gender
+    description: Legacy gender code to Facets MEME_SEX
+    config:
+      column_types: {src_gender_code: varchar(10), facets_sex: varchar(1), description: varchar(200)}
+    columns:
+      - name: src_gender_code
+        data_tests: [unique, not_null]
+
+  - name: xwalk_relationship
+    description: X12 relationship code to Facets MEME_REL
+    config:
+      column_types: {src_relationship_code: varchar(10), facets_rel: varchar(1), description: varchar(200)}
+    columns:
+      - name: src_relationship_code
+        data_tests: [unique, not_null]
+
+  - name: xwalk_plan
+    description: Legacy plan code to Facets product (PDPD_ID) and class plan (CSPI_ID)
+    config:
+      column_types: {src_plan_code: varchar(20), lob_code: varchar(10), pdpd_id: varchar(20), cspi_id: varchar(20), plan_description: varchar(200)}
+    columns:
+      - name: src_plan_code
+        data_tests: [unique, not_null]
+
+  - name: xwalk_claim_status
+    description: Legacy claim / line status to Facets status code
+    config:
+      column_types: {status_level: varchar(10), src_status: varchar(20), facets_status: varchar(2), description: varchar(200)}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [status_level, src_status]
+
+  - name: config_valid_values
+    description: Allowed values per config type, used by the values_in_config test
+    config:
+      column_types: {config_type: varchar(50), config_value: varchar(50), description: varchar(200)}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [config_type, config_value]

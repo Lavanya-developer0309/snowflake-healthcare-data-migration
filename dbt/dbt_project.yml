@@ -1,0 +1,59 @@
+# ==============================================================================
+#  dbt project: healthcare payer migration (legacy extracts -> Facets-like)
+# ==============================================================================
+name: hc_migration
+version: "1.0.0"
+profile: hc_migration
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+analysis-paths: ["analyses"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+# ------------------------------------------------------------------------------
+# Variables - override on the command line, e.g.
+#   dbt build --vars "{batch_id: BATCH_002}"
+# ------------------------------------------------------------------------------
+vars:
+  batch_id: BATCH_001           # which batch of RAW data to transform
+  grgr_ck_start: 100000         # contrived-key starting numbers (like a key-generation table)
+  sbsb_ck_start: 500000
+  meme_ck_start: 1000000
+  enable_masking: true          # apply masking policies to FACETS_STG tables (post-hook)
+  generate_keyword_files: true  # unload keyword files to @AUDIT.KEYWORD_STAGE (post-hook)
+
+# ------------------------------------------------------------------------------
+# Layers -> schemas (see macros/generate_schema_name.sql)
+# ------------------------------------------------------------------------------
+models:
+  hc_migration:
+    staging:
+      +schema: STAGING
+      +materialized: view
+    intermediate:
+      +schema: INTERMEDIATE
+      +materialized: table
+    facets_stg:
+      +schema: FACETS_STG
+      +materialized: table
+    keyword:
+      +schema: KEYWORD
+      +materialized: table
+
+seeds:
+  hc_migration:
+    +schema: REF
+
+data_tests:
+  hc_migration:
+    +store_failures: true        # failing rows are saved for investigation
+    +schema: DBT_TEST_AUDIT
+    staging:                     # source tests (models/staging/_sources.yml) only WARN:
+      +severity: warn            # they document client data issues, they don't stop the load
+
+# Write every test result to AUDIT.DBT_TEST_RESULTS (read by the scorecard procedure)
+on-run-end:
+  - "{{ log_test_results(results) }}"

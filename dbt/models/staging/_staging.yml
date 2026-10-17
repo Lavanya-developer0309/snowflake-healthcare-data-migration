@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: stg_legacy__group
+    description: Employer groups - trimmed, upper-cased codes, legacy MM/DD/YYYY dates converted to DATE.
+  - name: stg_legacy__member
+    description: >
+      Members - names cleansed to plain ASCII (accents translated, control characters removed),
+      SSN reduced to 9 digits (else NULL), dates converted, open-ended coverage set to 9999-12-31.
+      *_raw columns keep the original text so the intermediate layer can tell
+      "missing" apart from "invalid".
+  - name: stg_legacy__provider
+    description: Providers - cleansed names, digits-only NPI / TIN / ZIP.
+  - name: stg_legacy__claim_header
+    description: Claim headers - dates and amounts typed.
+  - name: stg_legacy__claim_line
+    description: Claim service lines - numbers and dates typed.

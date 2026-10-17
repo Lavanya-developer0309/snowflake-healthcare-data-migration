@@ -1,0 +1,28 @@
+version: 2
+
+# Every intermediate model returns ALL source rows of the batch, each with a
+# reject_reason (NULL = accepted). The facets_stg models take the accepted
+# rows; mig_transform_rejects collects the rest. That is what makes
+# source = staged + rejected reconcile.
+
+models:
+  - name: int_group_prepared
+    description: Groups with LOB / state / date rules and GRGR_CK contrived key.
+    columns:
+      - name: grgr_ck
+        data_tests: [unique]
+  - name: int_member_prepared
+    description: >
+      Members with gender / relationship / plan crosswalks, rejects cascading from
+      group to subscriber to dependents, and SBSB_CK / MEME_CK / MEME_SFX keys.
+    columns:
+      - name: meme_ck
+        data_tests: [unique]
+      - name: reject_reason
+        description: NULL when the member will be loaded, else the first failed rule
+  - name: int_provider_prepared
+    description: Providers with type / state / network rules; NPI length is a warning only.
+  - name: int_claim_prepared
+    description: Claim headers - member and provider must be LOADED, status crosswalk, date rules.
+  - name: int_claim_line_prepared
+    description: Claim lines - parent claim must be loaded; negative paid amount is a warning only.

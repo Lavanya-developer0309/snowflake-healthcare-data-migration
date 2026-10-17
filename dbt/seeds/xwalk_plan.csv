@@ -1,0 +1,7 @@
+src_plan_code,lob_code,pdpd_id,cspi_id,plan_description
+P100,COM,PDCOMPPO01,CSCOMPPO,Commercial PPO
+P200,COM,PDCOMHMO01,CSCOMHMO,Commercial HMO
+P300,COM,PDCOMHDH01,CSCOMHDH,Commercial high deductible
+M100,MCR,PDMCRADV01,CSMCRADV,Medicare Advantage
+M200,MCR,PDMCRPDP01,CSMCRPDP,Medicare Advantage with Part D
+D100,MCD,PDMCDHMO01,CSMCDHMO,Medicaid managed care
