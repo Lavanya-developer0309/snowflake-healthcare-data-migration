@@ -281,28 +281,123 @@ Take screenshots for the README (`docs/images/`).
 
 ---
 
-## Part G — Put it on GitHub (15 min)
+## Part G — Put it on GitHub (30 min)
 
-1. Create a free account at https://github.com.
-2. **New repository** → name `snowflake-healthcare-data-migration` → Public → **do not** add a README
-   (you already have one) → Create.
-3. In the project folder:
+### G1. Create the GitHub account and the repository
+1. Create a free account at https://github.com. Pick a professional username, because it appears in the
+   repo link on your resume.
+2. Top right **+** → **New repository**:
+   - Name: `snowflake-healthcare-data-migration`. Type it exactly, with **no space or hyphen at the end**
+     (a trailing `-` gives *Repository not found* on push).
+   - Visibility: **Public**
+   - Do **not** tick *Add a README*, *.gitignore* or *license* (the project already has them)
+   - **Create repository**
+
+### G2. Create a personal access token (GitHub no longer accepts your password in Terminal)
+1. GitHub → profile picture → **Settings** → **Developer settings** (bottom left) →
+   **Personal access tokens** → **Tokens (classic)** → **Generate new token (classic)**.
+2. Note: `laptop push`, Expiration: 90 days.
+3. Tick both scopes: **`repo`** and **`workflow`**. `workflow` is needed because the project contains
+   `.github/workflows/` files; without it the push fails with *403* / *refusing to allow ... workflow*.
+4. **Generate token** and copy it right away (it is shown only once). Keep it private: never paste it
+   into a file in the project, a chat or a screenshot.
+
+### G3. Tell Git who you are (once per laptop)
 ```bash
+git config --global user.name  "Your Full Name"
+git config --global user.email "you@example.com"     # the email of your GitHub account
+```
+This name is what shows as the author of every commit on GitHub.
+
+### G4. First push
+In Terminal, from the project folder:
+```bash
+cd /path/to/snowflake-healthcare-data-migration
 git init
 git add .
-git status                       # make sure NO .p8 key or profiles.yml is listed
+git status            # check: NO rsa_key.p8, NO profiles.yml, NO .venv in the list
 git commit -m "Healthcare payer data migration on Snowflake + dbt"
 git branch -M main
 git remote add origin https://github.com/<your-username>/snowflake-healthcare-data-migration.git
 git push -u origin main
 ```
-(First push opens a browser window to sign in to GitHub.)
+When Git asks:
+- **Username:** your GitHub username
+- **Password:** paste the **token** from G2 (nothing appears while you paste; that is normal) → Enter
 
-4. Open the **Actions** tab: the *dbt CI* workflow runs on every push and should go green.
-5. Optional: to run the pipeline from GitHub, add repository secrets `SNOWFLAKE_ACCOUNT` and
-   `SNOWFLAKE_PRIVATE_KEY` (the full text of `rsa_key.p8`) under *Settings → Secrets and variables →
-   Actions*, then run **Run migration pipeline** from the Actions tab.
-6. Pin the repo on your GitHub profile and put the link on your resume and LinkedIn.
+The Mac keychain remembers the token, so later pushes don't ask again.
+
+If you see `error: remote origin already exists`, fix the URL instead of adding it:
+```bash
+git remote set-url origin https://github.com/<your-username>/snowflake-healthcare-data-migration.git
+git remote -v         # check the URL is correct
+```
+
+If the push keeps failing with *403* because an old or wrong token is saved, remove it from the
+keychain and push again (Git will ask for the token):
+```bash
+printf "protocol=https\nhost=github.com\n" | git credential-osxkeychain erase
+git push -u origin main
+```
+
+### G5. Check the repository
+1. Refresh the repo page: all folders and the README should be there.
+2. **Actions** tab: the *dbt CI* workflow runs on every push and should show a green tick.
+3. On the repo home page, click the gear next to **About** and fill in:
+   - Description: `Healthcare payer data migration on Snowflake + dbt: profiling, validation, keyword
+     load files and reconciliation scorecard (synthetic data)`
+   - Topics: `snowflake`, `dbt`, `sql`, `data-migration`, `healthcare`, `data-engineering`,
+     `stored-procedures`, `data-quality`
+4. Your profile page → **Customize your pins** → pin this repo.
+
+### G6. Add screenshots to the README
+1. Take each screenshot straight to a file with **Cmd + Shift + 4** (drag over the area). It lands on
+   the Desktop as a PNG.
+2. Copy them into `docs/images/` with these names (the README already points to them):
+
+   | File | What to capture |
+   |---|---|
+   | `scorecard.png` | Part F scorecard query result |
+   | `rejects.png` | reject report query result |
+   | `keyword_file.png` | the keyword file HDR / DTL records |
+   | `dbt_lineage.png` | dbt lineage graph (see step 3) |
+
+3. Lineage graph: in the `dbt` folder with the venv active run
+   ```bash
+   dbt docs generate
+   dbt docs serve        # opens the docs in your browser; Ctrl + C in Terminal to stop
+   ```
+   Click the blue round icon at the bottom right of the page, then take the screenshot.
+4. Make sure every file is a **real PNG**. A file saved from Preview can be a TIFF with a `.png` name,
+   and GitHub shows it as a broken image:
+   ```bash
+   file docs/images/*.png       # every line must say "PNG image data"
+   ```
+   If one says TIFF: open it in Preview → **File → Export** → Format **PNG** → save over it.
+5. Push:
+   ```bash
+   git add docs/images README.md
+   git status                   # images should be listed
+   git commit -m "Add screenshots"
+   git push
+   ```
+   GitHub caches images for a few minutes, so if an image still looks broken right after the push,
+   reload the page after about 5 minutes.
+
+### G7. Every later change
+```bash
+git status
+git add <changed files>        # or: git add .
+git commit -m "Short description of the change"
+git push
+```
+
+### G8. Optional: run the pipeline from GitHub
+Add repository secrets `SNOWFLAKE_ACCOUNT` and `SNOWFLAKE_PRIVATE_KEY` (the full text of `rsa_key.p8`)
+under *Settings → Secrets and variables → Actions*, then run **Run migration pipeline** from the
+Actions tab. The key is stored encrypted by GitHub; it must never be committed as a file.
+
+Then put the repo link on your resume and LinkedIn.
 
 ---
 
@@ -318,6 +413,12 @@ git push -u origin main
 | Keyword load → *Remote file was not found* | `dbt build` failed a test for that entity, so no file was created. Read the dbt output, fix, re-run. |
 | `Set-ExecutionPolicy` error running the `.ps1` | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` |
 | Masking demo shows clear data for MIG_ANALYST | Make sure you switched the **primary** role (`USE ROLE MIG_ANALYST;`). |
+| `git push` → *Password authentication is not supported* | Use a personal access token as the password (G2). |
+| `git push` → *Repository not found* | The repo name on GitHub and in `git remote -v` differ (check for a trailing `-` or a typo). Fix with `git remote set-url` (G4). |
+| `git push` → *403* or *refusing to allow ... workflow* | Token is missing the `workflow` scope, or an old token is saved. Create a new classic token with `repo` + `workflow` and erase the keychain entry (G4). |
+| `git remote add` → *remote origin already exists* | `git remote set-url origin <url>` (G4). |
+| Image shows as broken on GitHub | Not pushed (`git status`), wrong name/case, or a TIFF saved as `.png` (G6 step 4). |
+| `pip install` → *CERTIFICATE_VERIFY_FAILED* | Run *Install Certificates.command* from the Python 3.12 folder in Applications, then recreate the venv (D2). |
 
 ---
 
