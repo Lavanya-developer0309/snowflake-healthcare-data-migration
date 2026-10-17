@@ -256,6 +256,10 @@ and no data went missing. Restoring the one-line crosswalk entry and re-running 
 
 ![Keyword file](docs/images/keyword_file.png)
 
+**dbt lineage graph: sources → staging → intermediate → Facets-like tables → keyword files**
+
+![dbt lineage graph](docs/images/dbt_lineage.png)
+
 ---
 
 ## Future enhancements
