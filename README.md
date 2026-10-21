@@ -396,16 +396,27 @@ and no data went missing. Restoring the one-line crosswalk entry and re-running 
 
 ---
 
+## Built since: S3, Snowpipe, Airflow and an AI agent
+
+This project is now run end to end by [hc-ai-agent-pipeline](https://github.com/Lavanya-developer0309/hc-ai-agent-pipeline):
+source files land in **Amazon S3**, **Snowpipe** loads them into `RAW` automatically, **Airflow** hands each
+batch to a local **AI agent** that calls this project's procedures and `dbt build`, and every decision is
+logged in Snowflake. Batches `BATCH_002`–`BATCH_006` were loaded from S3 this way with scorecards identical
+to `BATCH_001`. Source tests are scoped to the batch being run (`+where: BATCH_ID = ...` in `dbt_project.yml`),
+because `RAW` keeps every batch.
+
+## Related projects
+- [hc-ai-agent-pipeline](https://github.com/Lavanya-developer0309/hc-ai-agent-pipeline) — S3 + Snowpipe + Airflow + dbt, run by a local AI agent with guardrails and human approvals
+- [ai-data-profiling-agent](https://github.com/Lavanya-developer0309/ai-data-profiling-agent) — web tool: AI proposes profiling checks, Snowflake counts every row, verified client report
+
 ## Future enhancements
 
 - Streamlit in Snowflake dashboard over the scorecard and error log (a first version is in
   `streamlit/migration_dashboard.py`).
-- Land source files from **Amazon S3** through an external stage + storage integration (and Snowpipe for
-  automatic ingestion).
 - Run dbt inside Snowflake with **dbt Projects on Snowflake** so the whole pipeline is one task graph.
 - **Incremental / delta loads** for post-conversion daily files using Streams and dbt incremental models.
 - Tag-based masking and row access policies by line of business.
-- Second batch (`--batch BATCH_002`) with changed records to demonstrate re-conversion.
+- A batch with changed records to demonstrate re-conversion.
 
 ---
 

@@ -53,6 +53,7 @@ data_tests:
     +schema: DBT_TEST_AUDIT
     staging:                     # source tests (models/staging/_sources.yml) only WARN:
       +severity: warn            # they document client data issues, they don't stop the load
+      +where: "BATCH_ID = '{{ var('batch_id') }}'"   # RAW keeps every batch - test only the batch being run
 
 # Write every test result to AUDIT.DBT_TEST_RESULTS (read by the scorecard procedure)
 on-run-end:
